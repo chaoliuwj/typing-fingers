@@ -11,3 +11,5 @@ English touch-typing finger practice (Vite + React + TypeScript).
 npm install
 npm run dev
 
+浏览器打开 http://localhost:5173
+
