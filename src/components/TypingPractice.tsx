@@ -16,6 +16,17 @@ interface Stats {
   backspaces: number
 }
 
+interface SavedResult {
+  id: string
+  text: string
+  time: number
+  wpm: number
+  accuracy: number
+  errors: number
+  backspaces: number
+  timestamp: string
+}
+
 export function TypingPractice() {
   const [currentTextIndex, setCurrentTextIndex] = useState(0)
   const [currentText] = useState(TEXTS[currentTextIndex])
@@ -28,6 +39,8 @@ export function TypingPractice() {
     backspaces: 0
   })
   const [isActive, setIsActive] = useState(false)
+  const [savedResults, setSavedResults] = useState<SavedResult[]>([])
+  const [isFinished, setIsFinished] = useState(false)
 
   // Timer effect
   useEffect(() => {
@@ -92,6 +105,8 @@ export function TypingPractice() {
         errors: prev.errors + 1,
         totalChars: prev.totalChars + 1
       }))
+      // Always advance on error (default behavior)
+      setCurrentIndex(currentIndex + 1)
     }
   }, [currentIndex, currentText, isActive])
 
@@ -99,6 +114,28 @@ export function TypingPractice() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
+
+  // Auto-end when text is completed
+  useEffect(() => {
+    if (currentIndex >= currentText.length && isActive && !isFinished) {
+      // Automatically trigger end
+      if (stats.elapsed > 0 || currentIndex > 0) {
+        const newResult: SavedResult = {
+          id: Date.now().toString(),
+          text: currentText.substring(0, currentIndex),
+          time: stats.elapsed,
+          wpm,
+          accuracy,
+          errors: stats.errors,
+          backspaces: stats.backspaces,
+          timestamp: new Date().toLocaleString()
+        }
+        setSavedResults(prev => [newResult, ...prev])
+        setIsFinished(true)
+        setIsActive(false)
+      }
+    }
+  }, [currentIndex, currentText.length, isActive, isFinished, stats, wpm, accuracy])
 
   const handleReset = () => {
     setCurrentIndex(0)
@@ -110,6 +147,7 @@ export function TypingPractice() {
       backspaces: 0
     })
     setIsActive(false)
+    setIsFinished(false)
   }
 
   const handleSelectText = (index: number) => {
@@ -133,8 +171,9 @@ export function TypingPractice() {
   const isCompleted = currentIndex >= currentText.length
 
   return (
-    <div className="typing-practice">
-      <h1>Typing Fingers Practice</h1>
+    <div className="typing-practice-layout">
+      <div className="typing-practice">
+        <h1>Typing Fingers Practice</h1>
 
       {/* Text Selection */}
       <div className="text-selector">
@@ -143,68 +182,102 @@ export function TypingPractice() {
             key={index}
             className={`text-btn ${index === currentTextIndex ? 'active' : ''}`}
             onClick={() => handleSelectText(index)}
+            disabled={isActive}
           >
-            Text {index + 1}
+            {`Text ${index + 1}`}
           </button>
         ))}
       </div>
 
-      {/* Stats Display */}
-      <div className="stats">
-        <div className="stat-item">
-          <span className="label">Time</span>
-          <span className="value">{formatTime(stats.elapsed)}</span>
+        {/* Stats Display */}
+        <div className="stats">
+          <div className="stat-item">
+            <span className="label">Time</span>
+            <span className="value">{formatTime(stats.elapsed)}</span>
+          </div>
+          <div className="stat-item">
+            <span className="label">WPM</span>
+            <span className="value">{wpm}</span>
+          </div>
+          <div className="stat-item">
+            <span className="label">Accuracy</span>
+            <span className="value">{accuracy}%</span>
+          </div>
+          <div className="stat-item">
+            <span className="label">Errors</span>
+            <span className="value">{stats.errors}</span>
+          </div>
+          <div className="stat-item">
+            <span className="label">Backspace</span>
+            <span className="value">{stats.backspaces}</span>
+          </div>
         </div>
-        <div className="stat-item">
-          <span className="label">WPM</span>
-          <span className="value">{wpm}</span>
-        </div>
-        <div className="stat-item">
-          <span className="label">Accuracy</span>
-          <span className="value">{accuracy}%</span>
-        </div>
-        <div className="stat-item">
-          <span className="label">Errors</span>
-          <span className="value">{stats.errors}</span>
-        </div>
-        <div className="stat-item">
-          <span className="label">Backspace</span>
-          <span className="value">{stats.backspaces}</span>
-        </div>
-      </div>
 
-      {/* Fingering Hint */}
-      {fingerHint && (
-        <div className="finger-hint">
-          <p>Next key: <strong>{nextTargetChar === ' ' ? '(space)' : nextTargetChar}</strong></p>
-          <p className="hint-text">Use: {fingerHint}</p>
+        {/* Text Display */}
+        <div className={`text-display ${isCompleted && !isFinished ? 'completed' : ''} ${isFinished ? 'finished' : ''}`}>
+          {currentText.split('').map((char, index) => (
+            <span
+              key={index}
+              className={`char ${
+                index < currentIndex ? 'correct' : index === currentIndex ? 'current' : 'pending'
+              }`}
+            >
+              {char === ' ' ? '·' : char}
+            </span>
+          ))}
         </div>
-      )}
 
-      {/* Text Display */}
-      <div className={`text-display ${isCompleted ? 'completed' : ''}`}>
-        {currentText.split('').map((char, index) => (
-          <span
-            key={index}
-            className={`char ${
-              index < currentIndex ? 'correct' : index === currentIndex ? 'current' : 'pending'
-            }`}
-          >
-            {char === ' ' ? '·' : char}
-          </span>
-        ))}
-      </div>
-
-      {/* Action Buttons */}
-      <div className="actions">
-        <button className="reset-btn" onClick={handleReset}>
-          Reset
-        </button>
-        {isCompleted && (
-          <div className="completion-message">
-            ✓ Completed! Time: {formatTime(stats.elapsed)} | WPM: {wpm} | Accuracy: {accuracy}%
+        {/* Fingering Hint */}
+        {fingerHint && (
+          <div className="finger-hint">
+            <p>Next key: <strong>{nextTargetChar === ' ' ? '(space)' : nextTargetChar}</strong></p>
+            <p className="hint-text">Use: {fingerHint}</p>
           </div>
         )}
+
+        {/* Action Buttons */}
+        <div className="actions">
+          {isFinished && (
+            <div className="completion-message">
+              ✓ Finished! Time: {formatTime(stats.elapsed)} | WPM: {wpm} | Accuracy: {accuracy}%
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Right Sidebar - Saved Results */}
+      <div className="saved-results-sidebar">
+        <h2>Saved Results</h2>
+        <div className="results-list">
+          {savedResults.length === 0 ? (
+            <p className="no-results">No results yet</p>
+          ) : (
+            savedResults.map((result) => (
+              <div key={result.id} className="result-item">
+                <div className="result-header">
+                  <span className="timestamp">{result.timestamp}</span>
+                </div>
+                <div className="result-stats">
+                  <div className="result-stat">
+                    <span className="label">Time</span>
+                    <span className="value">{formatTime(result.time)}</span>
+                  </div>
+                  <div className="result-stat">
+                    <span className="label">WPM</span>
+                    <span className="value">{result.wpm}</span>
+                  </div>
+                  <div className="result-stat">
+                    <span className="label">Accuracy</span>
+                    <span className="value">{result.accuracy}%</span>
+                  </div>
+                </div>
+                <div className="result-text">
+                  <small>Text: {result.text.substring(0, 50)}{result.text.length > 50 ? '...' : ''}</small>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   )
